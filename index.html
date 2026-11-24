@@ -1,17 +1,9 @@
-<?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE html>
-<html b:css='false' b:defaultwidgetversion='2' b:layoutsversion='3' xmlns='http://www.w3.org/1999/xhtml' xmlns:b='http://www.google.com/namespaces/b/2001' xmlns:data='http://www.google.com/namespaces/datalayer/2001' xmlns:expr='http://www.google.com/namespaces/affect/2001'>
+<html lang="en">
 <head>
     <meta charset="UTF-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-    <title><data:blog.title/></title>
-    
-    <b:skin><![CDATA[
-        /* Remove Blogger default elements */
-        #navbar-iframe, .navbar, .header-outer, .footer-outer, .sidebar-wrapper { display: none !important; visibility: hidden !important; height: 0 !important; }
-        body { margin: 0; padding: 0; overflow-x: hidden; }
-        .no-display { display: none !important; }
-    ]]></b:skin>
+    <title>Timed Breathing - Pranayama App</title>
 
     <style>
         :root {
@@ -29,10 +21,15 @@
 
         body {
             font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            display: flex; flex-direction: column; align-items: center;
-            background-color: var(--bg-light); margin: 0; padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: var(--bg-light);
+            margin: 0;
+            padding: 20px;
             color: var(--text-dark);
             min-height: 100vh;
+            overflow-x: hidden;
         }
 
         #timer { 
@@ -153,19 +150,11 @@
 </head>
 
 <body>
-    <!-- Main content area for Blogger - Satisfies validation while hiding posts -->
-    <b:section id='main' showaddelement='no'>
-        <b:widget id='Blog1' locked='true' title='Blog Posts' type='Blog'>
-            <b:includable id='main'>
-                <div class='no-display'><data:content/></div>
-            </b:includable>
-        </b:widget>
-    </b:section>
-
-    <!-- The Pranayama App Content -->
+    <!-- Session Timer & Current Phase Indicator -->
     <div id="timer">00:00:00</div>
     <div id="status-text">Ready</div>
 
+    <!-- Animated Breathing Viewport -->
     <div class="viewport" id="viewport">
         <div id="hud">
             <div id="hud-label">Breath</div>
@@ -175,6 +164,7 @@
         <div id="track"></div>
     </div>
 
+    <!-- Timing Controls -->
     <div class="controls-container">
         <div class="inputs" id="inputWrapper">
             <div class="input-group"><label>Inhale</label><input id="inT" min="1" type="number" value="5"/></div>
@@ -185,12 +175,14 @@
         <button id="btn">Begin Practice</button>
     </div>
 
+    <!-- Background Gradient Customizer -->
     <div class="gradient-lab" id="labWrapper">
         <input id="color1" oninput="updateGradient()" type="color" value="#eef2f3"/>
         <input id="stopRange" max="100" min="0" oninput="updateGradient()" type="range" value="50"/>
         <input id="color2" oninput="updateGradient()" type="color" value="#8e9eab"/>
     </div>
 
+    <!-- Session Summary Modal -->
     <div id="summary-modal">
         <div class="modal-content">
             <h2>Session Complete</h2>
@@ -227,14 +219,17 @@
         const restartBtn = document.getElementById('restart-btn');
 
         window.onload = function() {
-            const savedC1 = localStorage.getItem('pranayama-c1');
-            const savedC2 = localStorage.getItem('pranayama-c2');
-            const savedStop = localStorage.getItem('pranayama-stop');
+            try {
+                const savedC1 = localStorage.getItem('pranayama-c1');
+                const savedC2 = localStorage.getItem('pranayama-c2');
+                const savedStop = localStorage.getItem('pranayama-stop');
 
-            if (savedC1) document.getElementById('color1').value = savedC1;
-            if (savedC2) document.getElementById('color2').value = savedC2;
-            if (savedStop) document.getElementById('stopRange').value = savedStop;
-            
+                if (savedC1) document.getElementById('color1').value = savedC1;
+                if (savedC2) document.getElementById('color2').value = savedC2;
+                if (savedStop) document.getElementById('stopRange').value = savedStop;
+            } catch (e) {
+                // Ignore storage errors in sandboxed frames
+            }
             updateGradient();
         };
 
@@ -247,9 +242,13 @@
             document.documentElement.style.setProperty('--grad-color-2', c2);
             document.documentElement.style.setProperty('--grad-stop', stop + '%');
 
-            localStorage.setItem('pranayama-c1', c1);
-            localStorage.setItem('pranayama-c2', c2);
-            localStorage.setItem('pranayama-stop', stop);
+            try {
+                localStorage.setItem('pranayama-c1', c1);
+                localStorage.setItem('pranayama-c2', c2);
+                localStorage.setItem('pranayama-stop', stop);
+            } catch (e) {
+                // Ignore storage errors
+            }
         }
 
         async function initAudio() {
@@ -271,7 +270,7 @@
             filter.frequency.exponentialRampToValueAtTime(rising ? 1200 : 100, ctx.currentTime + dur);
             const gain = ctx.createGain();
             gain.gain.setValueAtTime(0, ctx.currentTime);
-            gain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.8);
+            gain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + Math.min(0.8, dur * 0.4));
             gain.gain.linearRampToValueAtTime(0, ctx.currentTime + dur);
             src.connect(filter).connect(gain).connect(ctx.destination);
             src.start();
@@ -304,62 +303,115 @@
 
         function buildCycle() {
             const tIn = parseFloat(document.getElementById('inT').value) || 1;
-            const tH1 = parseFloat(document.getElementById('h1T').value) || 0;
+            const tH1 = Math.max(0, parseFloat(document.getElementById('h1T').value) || 0);
             const tOut = parseFloat(document.getElementById('outT').value) || 1;
-            const tH2 = parseFloat(document.getElementById('h2T').value) || 0;
+            const tH2 = Math.max(0, parseFloat(document.getElementById('h2T').value) || 0);
+
             trackSegments.push(createSegment(14, tIn * SCALE, lastEndTop - (tIn * SCALE), lastEndLeft, 'inhale'));
             lastEndTop -= (tIn * SCALE);
-            trackSegments.push(createSegment(tH1 * SCALE, 14, lastEndTop, lastEndLeft, 'hold-top'));
-            lastEndLeft += (tH1 * SCALE);
-            trackSegments.push(createSegment(14, tOut * SCALE, lastEndTop, lastEndLeft, 'exhale'));
+
+            if (tH1 > 0) {
+                trackSegments.push(createSegment(tH1 * SCALE, 14, lastEndTop, lastEndLeft, 'hold-top'));
+                lastEndLeft += (tH1 * SCALE);
+            }
+
+            const exhaleSeg = createSegment(14, tOut * SCALE, lastEndTop, lastEndLeft, 'exhale');
+            exhaleSeg.dataset.endOfCycle = (tH2 <= 0) ? 'true' : 'false';
+            trackSegments.push(exhaleSeg);
             lastEndTop += (tOut * SCALE);
-            trackSegments.push(createSegment(tH2 * SCALE, 14, lastEndTop, lastEndLeft, 'hold-bottom'));
-            lastEndLeft += (tH2 * SCALE);
+
+            if (tH2 > 0) {
+                const holdBottomSeg = createSegment(tH2 * SCALE, 14, lastEndTop, lastEndLeft, 'hold-bottom');
+                holdBottomSeg.dataset.endOfCycle = 'true';
+                trackSegments.push(holdBottomSeg);
+                lastEndLeft += (tH2 * SCALE);
+            }
         }
 
         async function engine() {
-            lastEndLeft = -2500; lastEndTop = 0;
+            lastEndLeft = -2500;
+            lastEndTop = 0;
             track.innerHTML = ''; 
             trackSegments = [];
-            for(let i=0; i<15; i++) buildCycle();
-            let idx = 24; 
-            while(isRunning) {
+            for (let i = 0; i < 15; i++) buildCycle();
+
+            let idx = trackSegments.findIndex(seg => seg.classList.contains('inhale'));
+            if (idx === -1) idx = 0;
+
+            while (isRunning) {
                 if (idx >= trackSegments.length - 8) buildCycle();
                 const seg = trackSegments[idx];
                 const type = seg.classList[1];
                 let dur, label;
-                if(type === 'inhale') { dur = parseFloat(document.getElementById('inT').value); label = "Inhale"; status.style.color = "var(--path-green)"; }
-                else if(type.includes('hold')) { dur = type === 'hold-top' ? parseFloat(document.getElementById('h1T').value) : parseFloat(document.getElementById('h2T').value); label = "Hold"; status.style.color = "var(--path-blue)"; }
-                else { dur = parseFloat(document.getElementById('outT').value); label = "Exhale"; status.style.color = "var(--ball-red)"; }
+
+                if (type === 'inhale') {
+                    dur = parseFloat(document.getElementById('inT').value) || 1;
+                    label = "Inhale";
+                    status.style.color = "var(--path-green)";
+                } else if (type.includes('hold')) {
+                    dur = type === 'hold-top'
+                        ? (parseFloat(document.getElementById('h1T').value) || 0)
+                        : (parseFloat(document.getElementById('h2T').value) || 0);
+                    label = "Hold";
+                    status.style.color = "var(--path-blue)";
+                } else {
+                    dur = parseFloat(document.getElementById('outT').value) || 1;
+                    label = "Exhale";
+                    status.style.color = "var(--ball-red)";
+                }
+
+                // Skip zero-duration segments so neither audio nor voice plays
+                if (dur <= 0) {
+                    if (seg.dataset.endOfCycle === 'true' && isRunning) {
+                        breathCounter++;
+                        countDisplay.innerText = breathCounter;
+                    }
+                    idx++;
+                    continue;
+                }
+
                 status.innerText = label;
-                const utter = new SpeechSynthesisUtterance(label);
-                window.speechSynthesis.speak(utter);
+                if ('speechSynthesis' in window) {
+                    window.speechSynthesis.cancel();
+                    const utter = new SpeechSynthesisUtterance(label);
+                    window.speechSynthesis.speak(utter);
+                }
+
                 if (type === 'inhale') playBreathSound(dur, true);
                 else if (type === 'exhale') playBreathSound(dur, false);
-                else if (dur > 0) playTempleBell(Math.min(dur, 8));
+                else playTempleBell(Math.min(dur, 8));
+
                 let tx = -parseFloat(seg.style.left);
                 let ty = -parseFloat(seg.style.top);
                 if (type === 'exhale') ty = -(parseFloat(seg.style.top) + parseFloat(seg.style.height));
                 if (type.includes('hold')) tx = -(parseFloat(seg.style.left) + parseFloat(seg.style.width));
+
                 track.style.transition = `transform ` + dur + `s linear`;
                 track.style.transform = `translate(` + tx + `px, ` + ty + `px)`;
+
                 const start = Date.now();
                 const timer = setInterval(() => {
                     const elapsed = (Date.now() - start) / 1000;
                     const pc = Math.min((elapsed / dur) * 100, 100);
                     seg.style.setProperty('--progress', pc + '%');
-                    if (type === 'inhale') ball.style.transform = `translate(-50%, -50%) scale(` + (1 + (pc/100) * 1.8) + `)`;
-                    if (type === 'exhale') ball.style.transform = `translate(-50%, -50%) scale(` + (2.8 - (pc/100) * 1.8) + `)`;
-                    if(pc >= 100 || !isRunning) clearInterval(timer);
+                    if (type === 'inhale') ball.style.transform = `translate(-50%, -50%) scale(` + (1 + (pc / 100) * 1.8) + `)`;
+                    if (type === 'exhale') ball.style.transform = `translate(-50%, -50%) scale(` + (2.8 - (pc / 100) * 1.8) + `)`;
+                    if (pc >= 100 || !isRunning) clearInterval(timer);
                 }, 30);
+
                 await new Promise(r => setTimeout(r, dur * 1000));
-                if(type === 'hold-bottom' && isRunning) { breathCounter++; countDisplay.innerText = breathCounter; }
+
+                if (seg.dataset.endOfCycle === 'true' && isRunning) {
+                    breathCounter++;
+                    countDisplay.innerText = breathCounter;
+                }
                 idx++;
             }
         }
 
         function softReset() {
             isRunning = false;
+            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
             breathCounter = 0;
             sessionSeconds = 0;
             countDisplay.innerText = '0';
@@ -378,7 +430,7 @@
         restartBtn.onclick = softReset;
 
         btn.onclick = async function() {
-            if(!isRunning) {
+            if (!isRunning) {
                 await initAudio();
                 isRunning = true;
                 this.innerText = "RESET";
@@ -386,13 +438,16 @@
                 document.getElementById('labWrapper').classList.add('hidden');
                 engine();
                 const clock = setInterval(() => {
-                    if(isRunning) {
+                    if (isRunning) {
                         sessionSeconds++;
                         document.getElementById('timer').innerText = new Date(sessionSeconds * 1000).toISOString().substr(11, 8);
-                    } else clearInterval(clock);
+                    } else {
+                        clearInterval(clock);
+                    }
                 }, 1000);
             } else {
                 isRunning = false;
+                if ('speechSynthesis' in window) window.speechSynthesis.cancel();
                 document.getElementById('final-breaths').innerText = breathCounter;
                 document.getElementById('final-time').innerText = document.getElementById('timer').innerText;
                 modal.style.display = 'flex';
